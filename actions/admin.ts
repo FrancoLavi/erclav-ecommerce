@@ -1,14 +1,12 @@
 "use server";
 
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
-
 import type { CouponDiscountType, OrderStatus, RoleName } from "@prisma/client";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { auth } from "@/auth";
+import { uploadProductImage } from "@/lib/cloudinary";
 import { sendInvoiceEmail, sendOrderCancelledEmail, sendOrderStatusEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 
@@ -91,32 +89,14 @@ function firstError(error: z.ZodError) {
 }
 
 async function saveProductImages(files: File[]) {
-  const extensions: Record<string, string> = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/webp": ".webp",
-    "image/avif": ".avif",
-  };
-  const validFiles = files.filter((file) => file.size > 0 && file.size <= 8 * 1024 * 1024 && Boolean(extensions[file.type]));
+  const validTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
+  const validFiles = files.filter((file) => file.size > 0 && file.size <= 8 * 1024 * 1024 && validTypes.has(file.type));
 
   if (!validFiles.length) {
     return [];
   }
 
-  const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
-  await mkdir(uploadDir, { recursive: true });
-
-  const urls: string[] = [];
-
-  for (const file of validFiles) {
-    const extension = extensions[file.type];
-    const fileName = `${Date.now()}-${crypto.randomUUID()}${extension}`;
-    const bytes = await file.arrayBuffer();
-    await writeFile(path.join(uploadDir, fileName), Buffer.from(bytes));
-    urls.push(`/uploads/products/${fileName}`);
-  }
-
-  return urls;
+  return Promise.all(validFiles.map(uploadProductImage));
 }
 
 function selectedIds(formData: FormData, key: string) {

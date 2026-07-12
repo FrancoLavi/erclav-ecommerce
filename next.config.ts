@@ -17,6 +17,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "images.unsplash.com",
       },
+      {
+        protocol: "https",
+        hostname: "res.cloudinary.com",
+      },
     ],
   },
   async headers() {
@@ -26,7 +30,7 @@ const nextConfig: NextConfig = {
       "default-src 'self'",
       `script-src ${process.env.NODE_ENV === "production" ? productionScriptPolicy : developmentScriptPolicy}`,
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://images.unsplash.com",
+      "img-src 'self' data: blob: https://images.unsplash.com https://res.cloudinary.com",
       "font-src 'self' data:",
       "connect-src 'self' https://api.stripe.com https://api.mercadopago.com",
       "frame-src https://js.stripe.com https://hooks.stripe.com https://www.mercadopago.com.ar",
