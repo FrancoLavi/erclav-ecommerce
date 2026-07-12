@@ -1,6 +1,20 @@
 import { NextResponse } from "next/server";
+import NextAuth from "next-auth";
 
-import { auth } from "@/auth";
+const { auth: edgeAuth } = NextAuth({
+  providers: [],
+  session: { strategy: "jwt" },
+  trustHost: true,
+  callbacks: {
+    session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string;
+        session.user.roles = (token.roles as typeof session.user.roles) ?? [];
+      }
+      return session;
+    },
+  },
+});
 
 const protectedPrefixes = ["/cuenta", "/checkout", "/ordenes", "/favoritos"];
 const authPrefixes = ["/auth/login", "/auth/registro"];
@@ -22,7 +36,7 @@ function authRateLimit(request: Request) {
   return null;
 }
 
-export default auth((request) => {
+export default edgeAuth((request) => {
   const limited = authRateLimit(request);
   if (limited) return limited;
   const { pathname } = request.nextUrl;
