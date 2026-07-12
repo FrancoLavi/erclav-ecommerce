@@ -4,7 +4,14 @@ Ecommerce full stack construido como proyecto de portfolio. Incluye catálogo p�
 
 ## Demo
 
-La aplicación está preparada para desplegarse en Vercel con PostgreSQL administrado. La URL pública se agregará aquí después del primer despliegue.
+[Ver demo en producción](https://erclav-ecommerce.vercel.app)
+
+Cuenta de cliente para pruebas:
+
+- Email: `cliente@erclav.local`
+- Contraseña: `Cliente123`
+
+El acceso administrativo no se publica en el repositorio.
 
 ## Funcionalidades
 
