@@ -1,6 +1,7 @@
 import Image from "next/image";
 
 import { money } from "@/lib/format";
+import { productImageUrl } from "@/lib/product-image";
 
 type Cart = Awaited<ReturnType<typeof import("@/actions/store").getCart>>;
 
@@ -28,7 +29,7 @@ export function CheckoutSummary({
           return (
             <div key={item.id} className="flex gap-3">
               <div className="relative h-16 w-16 overflow-hidden rounded-md bg-neutral-100">
-                {image ? <Image src={image.url} alt={item.variant.product.name} fill sizes="64px" className="object-cover" /> : null}
+                {image ? <Image src={productImageUrl(image.url)} alt={item.variant.product.name} fill sizes="64px" className="object-cover" /> : null}
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{item.variant.product.name}</p>

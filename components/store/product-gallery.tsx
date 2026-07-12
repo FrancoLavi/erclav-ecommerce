@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Image from "next/image";
 
+import { productImageUrl } from "@/lib/product-image";
+
 export function ProductGallery({
   images,
   name,
@@ -10,7 +12,7 @@ export function ProductGallery({
   images: { url: string; altText: string | null }[];
   name: string;
 }) {
-  const [active, setActive] = useState(images[0]?.url);
+  const [active, setActive] = useState(images[0] ? productImageUrl(images[0].url) : undefined);
 
   return (
     <div className="grid gap-3 lg:grid-cols-[88px_1fr]">
@@ -19,16 +21,16 @@ export function ProductGallery({
           <button
             key={image.url}
             type="button"
-            onClick={() => setActive(image.url)}
+            onClick={() => setActive(productImageUrl(image.url))}
             aria-label={`Ver imagen de ${image.altText ?? name}`}
-            aria-pressed={image.url === active}
+            aria-pressed={productImageUrl(image.url) === active}
             className={
-              image.url === active
+              productImageUrl(image.url) === active
                 ? "relative h-20 w-20 shrink-0 overflow-hidden rounded-md bg-neutral-100 ring-2 ring-neutral-950"
                 : "relative h-20 w-20 shrink-0 overflow-hidden rounded-md bg-neutral-100 ring-1 ring-black/10 transition hover:ring-neutral-500"
             }
           >
-            <Image src={image.url} alt={image.altText ?? name} fill sizes="80px" className="object-cover" />
+            <Image src={productImageUrl(image.url)} alt={image.altText ?? name} fill sizes="80px" className="object-cover" />
           </button>
         ))}
       </div>

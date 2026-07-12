@@ -4,6 +4,7 @@ import { Heart, ShoppingBag, Star } from "lucide-react";
 
 import { toggleFavoriteAction } from "@/actions/store";
 import { money } from "@/lib/format";
+import { productImageUrl } from "@/lib/product-image";
 
 type ProductCardProps = {
   product: {
@@ -28,7 +29,7 @@ export function ProductCard({ product }: ProductCardProps) {
         <div className="relative aspect-[4/5] overflow-hidden rounded-lg bg-[#ebe9e4] ring-1 ring-black/5">
           {image ? (
             <Image
-              src={image.url}
+              src={productImageUrl(image.url)}
               alt={image.altText ?? product.name}
               fill
               sizes="(max-width: 768px) 50vw, 25vw"

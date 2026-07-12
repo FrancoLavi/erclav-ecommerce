@@ -7,6 +7,7 @@ import { Minus, Plus, X } from "lucide-react";
 
 import { updateCartItemAction } from "@/actions/store";
 import { money } from "@/lib/format";
+import { productImageUrl } from "@/lib/product-image";
 
 type Cart = {
   id: string;
@@ -73,7 +74,7 @@ export function CartDrawer({
                     return (
                       <div key={item.id} className="flex gap-3 rounded-lg border border-black/10 bg-white p-3 shadow-sm">
                         <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-md bg-neutral-100">
-                          {image ? <Image src={image.url} alt={item.variant.product.name} fill sizes="96px" className="object-cover" /> : null}
+                          {image ? <Image src={productImageUrl(image.url)} alt={item.variant.product.name} fill sizes="96px" className="object-cover" /> : null}
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="line-clamp-2 text-sm font-semibold leading-5 text-neutral-950">{item.variant.product.name}</p>

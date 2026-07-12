@@ -10,6 +10,7 @@ import { ProductGallery } from "@/components/store/product-gallery";
 import { StoreShell } from "@/components/store/store-shell";
 import { money, shortDate } from "@/lib/format";
 import { getProductBySlug } from "@/lib/catalog-data";
+import { productImageUrl } from "@/lib/product-image";
 
 const ReviewForm = dynamic(() => import("@/components/store/review-form").then((module) => module.ReviewForm));
 export const revalidate = 300;
@@ -30,7 +31,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
     openGraph: {
       title: `${product.name} | ErcLav`,
       description: product.description ?? `Compra ${product.name} en ErcLav.`,
-      images: product.images[0] ? [{ url: product.images[0].url }] : undefined,
+      images: product.images[0] ? [{ url: productImageUrl(product.images[0].url) }] : undefined,
       type: "website",
       url: `/productos/${product.slug}`,
     },
@@ -55,7 +56,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
   return (
     <StoreShell>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "Product", name: product.name, description: product.description, image: product.images.map((image) => image.url), sku: product.sku, brand: { "@type": "Brand", name: product.brand?.name ?? "ErcLav" }, offers: { "@type": "Offer", priceCurrency: "ARS", price: Number(price), availability: product.variants.some((variant) => (variant.stock?.quantity ?? 0) - (variant.stock?.reservedQuantity ?? 0) > 0) ? "https://schema.org/InStock" : "https://schema.org/OutOfStock", url: `${process.env.AUTH_URL ?? "http://localhost:3000"}/productos/${product.slug}` }, aggregateRating: product.reviews.length ? { "@type": "AggregateRating", ratingValue: avg.toFixed(1), reviewCount: product.reviews.length } : undefined }).replaceAll("<", "\\u003c") }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "Product", name: product.name, description: product.description, image: product.images.map((image) => productImageUrl(image.url)), sku: product.sku, brand: { "@type": "Brand", name: product.brand?.name ?? "ErcLav" }, offers: { "@type": "Offer", priceCurrency: "ARS", price: Number(price), availability: product.variants.some((variant) => (variant.stock?.quantity ?? 0) - (variant.stock?.reservedQuantity ?? 0) > 0) ? "https://schema.org/InStock" : "https://schema.org/OutOfStock", url: `${process.env.AUTH_URL ?? "http://localhost:3000"}/productos/${product.slug}` }, aggregateRating: product.reviews.length ? { "@type": "AggregateRating", ratingValue: avg.toFixed(1), reviewCount: product.reviews.length } : undefined }).replaceAll("<", "\\u003c") }} />
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr]">
           <ProductGallery images={product.images} name={product.name} />

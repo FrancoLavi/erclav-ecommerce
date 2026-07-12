@@ -283,7 +283,7 @@ const products = [
     basePrice: 52000,
     salePrice: 45900,
     sku: "AD-SHORT-F",
-    images: [image("1506629905607-d9a297d14d30"), image("1515886657613-9f3515b0c78f")],
+    images: [image("1517836357463-d25dfeac3438"), image("1515886657613-9f3515b0c78f")],
     variants: [
       { color: "Negro", size: "S", stock: 10 },
       { color: "Negro", size: "M", stock: 14 },
