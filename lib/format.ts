@@ -6,9 +6,13 @@ export function money(value: number | string, currency = "ARS") {
   }).format(Number(value));
 }
 
-export function shortDate(value: Date) {
+export function shortDate(value: Date | string | number) {
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "Fecha no disponible";
+
   return new Intl.DateTimeFormat("es-AR", {
     dateStyle: "short",
     timeStyle: "short",
-  }).format(value);
+  }).format(date);
 }
