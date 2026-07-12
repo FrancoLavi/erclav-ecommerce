@@ -1,0 +1,19 @@
+import { redirect } from "next/navigation";
+import { Check, MapPin, Plus, Trash2 } from "lucide-react";
+
+import { createAddressAction, deleteAddressAction, setDefaultAddressAction, updateAddressAction } from "@/actions/account";
+import { auth } from "@/auth";
+import { AddressForm } from "@/components/account/address-form";
+import { AccountHeader, AccountPanel, EmptyAccountState } from "@/components/account/account-ui";
+import { prisma } from "@/lib/prisma";
+
+export default async function AddressesPage({ searchParams }: { searchParams: Promise<{ created?: string; updated?: string; error?: string }> }) {
+  const session = await auth(); if (!session?.user) redirect("/auth/login");
+  const [addresses, params] = await Promise.all([prisma.address.findMany({ where: { userId: session.user.id }, orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }] }), searchParams]);
+  const message = params.created ? "Direccion agregada correctamente." : params.updated ? "Direccion actualizada correctamente." : params.error ? "Revisa los datos de la direccion." : "";
+  return <><AccountHeader eyebrow="Entregas y facturacion" title="Direcciones" description="Administra los domicilios que vas a usar durante el checkout." />
+    {message ? <p className={params.error ? "rounded-md bg-red-50 p-4 text-sm font-semibold text-red-700" : "rounded-md bg-emerald-50 p-4 text-sm font-semibold text-emerald-700"}>{message}</p> : null}
+    <AccountPanel title="Nueva direccion" description="Agrega un domicilio de envio o facturacion."><details className="group"><summary className="flex h-11 cursor-pointer list-none items-center gap-2 rounded-full bg-neutral-950 px-5 text-sm font-bold text-white marker:content-none"><Plus className="h-4 w-4" aria-hidden />Agregar direccion</summary><div className="mt-6"><AddressForm action={createAddressAction} submitLabel="Guardar direccion" /></div></details></AccountPanel>
+    {addresses.length ? <div className="grid gap-4 xl:grid-cols-2">{addresses.map((address) => <AccountPanel key={address.id} title={address.label || (address.type === "SHIPPING" ? "Direccion de envio" : "Direccion de facturacion")}><div className="mb-5 flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#f2f0eb]"><MapPin className="h-5 w-5" aria-hidden /></span><div className="text-sm leading-6 text-neutral-600"><p className="font-bold text-neutral-950">{address.firstName} {address.lastName}</p><p>{address.street} {address.number}{address.apartment ? `, ${address.apartment}` : ""}</p><p>{address.city}, {address.province} · {address.postalCode}</p>{address.phone ? <p>{address.phone}</p> : null}</div></div><div className="mb-5 flex flex-wrap gap-2">{address.isDefault ? <span className="inline-flex h-9 items-center gap-2 rounded-full bg-emerald-50 px-3 text-xs font-bold text-emerald-700"><Check className="h-4 w-4" aria-hidden />Principal</span> : <form action={setDefaultAddressAction.bind(null, address.id)}><button className="h-9 rounded-full border border-black/15 px-3 text-xs font-bold hover:border-neutral-950">Usar como principal</button></form>}<form action={deleteAddressAction.bind(null, address.id)}><button className="inline-flex h-9 items-center gap-2 rounded-full border border-red-200 px-3 text-xs font-bold text-red-700 hover:bg-red-50"><Trash2 className="h-4 w-4" aria-hidden />Eliminar</button></form></div><details><summary className="cursor-pointer text-sm font-bold underline underline-offset-4">Editar direccion</summary><div className="mt-5 border-t border-black/10 pt-5"><AddressForm address={address} action={updateAddressAction.bind(null, address.id)} submitLabel="Actualizar direccion" /></div></details></AccountPanel>)}</div> : <EmptyAccountState icon={MapPin} title="No guardaste direcciones" description="Agrega una para completar tus proximas compras mas rapido." />}
+  </>;
+}

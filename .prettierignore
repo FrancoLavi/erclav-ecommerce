@@ -1,0 +1,6 @@
+.next
+node_modules
+.npm-cache
+coverage
+dist
+package-lock.json

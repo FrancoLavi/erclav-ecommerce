@@ -1,0 +1,13 @@
+node_modules
+.npm-cache
+.next
+.vercel
+out
+coverage
+.env
+.env*.local
+*.log
+public/uploads/products/*
+dist
+generated
+tsconfig.tsbuildinfo
