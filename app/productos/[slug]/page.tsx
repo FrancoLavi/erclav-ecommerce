@@ -11,6 +11,7 @@ import { StoreShell } from "@/components/store/store-shell";
 import { money, shortDate } from "@/lib/format";
 import { getProductBySlug } from "@/lib/catalog-data";
 import { productImageUrl } from "@/lib/product-image";
+import { whatsappUrl } from "@/lib/whatsapp";
 
 const ReviewForm = dynamic(() => import("@/components/store/review-form").then((module) => module.ReviewForm));
 export const revalidate = 300;
@@ -53,6 +54,9 @@ export default async function ProductPage({ params }: ProductPageProps) {
       ? product.reviews.reduce((sum, review) => sum + review.rating, 0) / product.reviews.length
       : 0;
   const price = product.salePrice ?? product.basePrice;
+  const whatsappHref = whatsappUrl(
+    `Hola, quisiera mas informacion sobre ${product.name}: ${process.env.AUTH_URL ?? "http://localhost:3000"}/productos/${product.slug}`,
+  );
 
   return (
     <StoreShell>
@@ -96,6 +100,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
                   Agregar a wishlist
                 </button>
               </form>
+              {whatsappHref ? (
+                <a
+                  href={whatsappHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 text-sm font-bold text-neutral-950 transition hover:bg-[#20bd5a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-2"
+                >
+                  Consultar este producto por WhatsApp
+                </a>
+              ) : null}
             </div>
           </section>
         </div>
