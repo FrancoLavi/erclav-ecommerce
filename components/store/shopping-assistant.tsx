@@ -1,25 +1,44 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
-  ArrowRight,
   ExternalLink,
   LoaderCircle,
   MessageCircle,
   Send,
+  PackageCheck,
+  RotateCcw,
   ShoppingBag,
   X,
 } from "lucide-react";
 
-import type { AssistantProduct, AssistantReply } from "@/lib/assistant";
+import { AssistantProductResult } from "@/components/store/assistant-product-result";
+import type {
+  AssistantConversationContext,
+  AssistantOrder,
+  AssistantProduct,
+  AssistantReply,
+} from "@/lib/assistant";
 
 type ChatMessage = {
   id: number;
   role: "assistant" | "user";
   content: string;
   products?: AssistantProduct[];
+  orders?: AssistantOrder[];
+};
+
+type StoredAssistantState = {
+  messages: ChatMessage[];
+  context: AssistantConversationContext;
+};
+
+const storageKey = "erclav_shopping_assistant";
+const welcomeMessage: ChatMessage = {
+  id: 1,
+  role: "assistant",
+  content: "Hola. Puedo ayudarte a encontrar productos y resolver dudas sobre envios, pagos, stock o pedidos.",
 };
 
 const initialSuggestions = [
@@ -28,29 +47,70 @@ const initialSuggestions = [
   "Que medios de pago aceptan?",
 ];
 
-function formatMoney(value: number) {
+function formatMoney(value: number, currency = "ARS") {
   return new Intl.NumberFormat("es-AR", {
     style: "currency",
-    currency: "ARS",
+    currency,
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("es-AR", { dateStyle: "short" }).format(new Date(value));
+}
+
+function orderStatusTextClass(status: string) {
+  if (["CANCELLED", "REFUNDED"].includes(status)) return "text-red-700";
+  if (["SHIPPED", "PROCESSING"].includes(status)) return "text-blue-700";
+  if (["DELIVERED", "PAID", "CONFIRMED"].includes(status)) return "text-emerald-700";
+  return "text-amber-700";
 }
 
 export function ShoppingAssistant({ whatsappHref }: { whatsappHref: string | null }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [suggestions, setSuggestions] = useState(initialSuggestions);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 1,
-      role: "assistant",
-      content: "Hola. Puedo ayudarte a encontrar productos y resolver dudas sobre envios, pagos, stock o pedidos.",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage]);
+  const [context, setContext] = useState<AssistantConversationContext>({});
+  const [hydrated, setHydrated] = useState(false);
   const messageId = useRef(1);
   const scrollArea = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(storageKey);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as Partial<StoredAssistantState>;
+      if (Array.isArray(parsed.messages) && parsed.messages.length) {
+        const restored = parsed.messages.filter((message) =>
+          message && typeof message.id === "number"
+          && (message.role === "assistant" || message.role === "user")
+          && typeof message.content === "string",
+        ).slice(-12);
+        if (restored.length) {
+          setMessages(restored);
+          messageId.current = Math.max(1, ...restored.map((message) => message.id));
+        }
+      }
+      if (parsed.context && typeof parsed.context === "object") {
+        setContext(parsed.context);
+      }
+    } catch {
+      sessionStorage.removeItem(storageKey);
+    } finally {
+      setHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const containsOrders = messages.some((message) => Boolean(message.orders?.length));
+    const safeMessages = (containsOrders ? [welcomeMessage] : messages).slice(-12);
+    sessionStorage.setItem(storageKey, JSON.stringify({ messages: safeMessages, context }));
+  }, [context, hydrated, messages]);
 
   useEffect(() => {
     if (!open) return;
@@ -78,7 +138,7 @@ export function ShoppingAssistant({ whatsappHref }: { whatsappHref: string | nul
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, context }),
       });
       const data = (await response.json()) as AssistantReply | { error?: string };
 
@@ -93,9 +153,11 @@ export function ShoppingAssistant({ whatsappHref }: { whatsappHref: string | nul
           role: "assistant",
           content: data.message,
           products: data.products,
+          orders: data.orders,
         },
       ]);
       setSuggestions(data.suggestions);
+      if (data.context) setContext(data.context);
     } catch (error) {
       setMessages((current) => [
         ...current,
@@ -113,6 +175,15 @@ export function ShoppingAssistant({ whatsappHref }: { whatsappHref: string | nul
     }
   }
 
+  function resetConversation() {
+    messageId.current = 1;
+    setMessages([welcomeMessage]);
+    setContext({});
+    setSuggestions(initialSuggestions);
+    setInput("");
+    sessionStorage.removeItem(storageKey);
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void sendMessage(input);
@@ -121,6 +192,14 @@ export function ShoppingAssistant({ whatsappHref }: { whatsappHref: string | nul
   function handleSuggestion(suggestion: string) {
     if (suggestion === "Hablar por WhatsApp" && whatsappHref) {
       window.open(whatsappHref, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (suggestion === "Nueva busqueda") {
+      resetConversation();
+      return;
+    }
+    if (suggestion === "Iniciar sesion") {
+      window.location.assign("/auth/login?callbackUrl=/");
       return;
     }
     if (suggestion === "Ir a mis pedidos") {
@@ -168,6 +247,15 @@ export function ShoppingAssistant({ whatsappHref }: { whatsappHref: string | nul
         </div>
         <button
           type="button"
+          onClick={resetConversation}
+          aria-label="Reiniciar conversacion"
+          title="Reiniciar conversacion"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-white/75 transition hover:bg-white/10 hover:text-white"
+        >
+          <RotateCcw className="h-4 w-4" aria-hidden />
+        </button>
+        <button
+          type="button"
           onClick={() => setOpen(false)}
           aria-label="Cerrar asistente"
           className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-white/75 transition hover:bg-white/10 hover:text-white"
@@ -190,31 +278,36 @@ export function ShoppingAssistant({ whatsappHref }: { whatsappHref: string | nul
               {message.products?.length ? (
                 <div className="space-y-2">
                   {message.products.map((product) => (
-                    <Link
+                    <AssistantProductResult
                       key={product.id}
-                      href={`/productos/${product.slug}`}
+                      product={product}
+                      onOpenProduct={() => setOpen(false)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+              {message.orders?.length ? (
+                <div className="space-y-2">
+                  {message.orders.map((order) => (
+                    <Link
+                      key={order.orderNumber}
+                      href={`/cuenta/pedidos/${order.orderNumber}`}
                       onClick={() => setOpen(false)}
-                      className="group flex min-h-24 items-center gap-3 rounded-lg bg-white p-2 shadow-sm ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:ring-black/15"
+                      className="flex items-center gap-3 rounded-lg bg-white p-3 shadow-sm ring-1 ring-black/5 transition hover:ring-black/20"
                     >
-                      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md bg-[#ebe9e4]">
-                        {product.image ? (
-                          <Image src={product.image} alt={product.name} fill sizes="80px" className="object-cover" />
-                        ) : (
-                          <div className="grid h-full place-items-center text-xs text-neutral-500">Sin imagen</div>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1 py-1">
-                        <p className="truncate text-xs font-bold uppercase text-neutral-500">{product.brand}</p>
-                        <p className="mt-1 line-clamp-2 text-sm font-bold leading-4 text-neutral-950">{product.name}</p>
-                        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <span className="text-sm font-black text-neutral-950">{formatMoney(product.price)}</span>
-                          {product.originalPrice ? <span className="text-xs text-neutral-500 line-through">{formatMoney(product.originalPrice)}</span> : null}
-                          <span className={product.available > 0 ? "text-xs font-semibold text-emerald-700" : "text-xs font-semibold text-red-700"}>
-                            {product.available > 0 ? "Disponible" : "Sin stock"}
-                          </span>
-                        </div>
-                      </div>
-                      <ArrowRight className="mr-1 h-4 w-4 shrink-0 text-neutral-400 transition group-hover:translate-x-0.5 group-hover:text-neutral-950" aria-hidden />
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#f2f0eb]">
+                        <PackageCheck className="h-5 w-5" aria-hidden />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-black">{order.orderNumber}</span>
+                        <span className="mt-1 block text-xs text-neutral-500">
+                          {formatDate(order.createdAt)} / {order.paymentStatusLabel}
+                        </span>
+                      </span>
+                      <span className="text-right">
+                        <span className={`block text-xs font-bold ${orderStatusTextClass(order.status)}`}>{order.statusLabel}</span>
+                        <span className="mt-1 block text-sm font-black">{formatMoney(order.total, order.currency)}</span>
+                      </span>
                     </Link>
                   ))}
                 </div>

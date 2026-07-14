@@ -6,4 +6,10 @@ export function getShoppingAssistant(): ShoppingAssistantProvider {
   return deterministicAssistant;
 }
 
-export type { AssistantProduct, AssistantReply } from "@/lib/assistant/types";
+export type {
+  AssistantConversationContext,
+  AssistantOrder,
+  AssistantProduct,
+  AssistantReply,
+  AssistantVariant,
+} from "@/lib/assistant/types";

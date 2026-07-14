@@ -1,14 +1,19 @@
 import type { Prisma } from "@prisma/client";
 
+import { orderStatusLabel, paymentStatusLabel } from "@/lib/account";
 import { prisma } from "@/lib/prisma";
 import { productImageUrl } from "@/lib/product-image";
-import type { AssistantReply, ShoppingAssistantProvider } from "@/lib/assistant/types";
+import type {
+  AssistantConversationContext,
+  AssistantReply,
+  ShoppingAssistantProvider,
+} from "@/lib/assistant/types";
 
 const stopWords = new Set([
   "algo", "busco", "comprar", "con", "de", "del", "el", "en", "la", "las", "lo", "los", "me",
   "disponibilidad", "disponible", "desde", "hasta", "mas", "menos", "mostrar", "para", "por", "producto",
-  "productos", "que", "quiero", "recomenda", "recomendas", "sin", "stock", "tenes", "tienen", "un", "una",
-  "unos", "unas", "ver",
+  "productos", "que", "quiero", "recomenda", "recomendas", "sin", "solo", "stock", "tenes", "tienen", "un",
+  "una", "unos", "unas", "ver",
 ]);
 
 function normalize(value: string) {
@@ -31,12 +36,21 @@ function parseAmount(raw: string, suffix?: string) {
 
 function priceRange(message: string) {
   const amount = "([\\d.,]+)\\s*(mil|k)?";
-  const max = message.match(new RegExp(`(?:hasta|menos de|maximo|tope|por debajo de)\\s*\\$?\\s*${amount}`));
-  const min = message.match(new RegExp(`(?:desde|mas de|minimo|por encima de)\\s*\\$?\\s*${amount}`));
+  const maxMatches = [...message.matchAll(new RegExp(`(?:hasta|menos de|maximo|tope|por debajo de)\\s*\\$?\\s*${amount}`, "g"))];
+  const minMatches = [...message.matchAll(new RegExp(`(?:desde|mas de|minimo|por encima de)\\s*\\$?\\s*${amount}`, "g"))];
+  const max = maxMatches.at(-1);
+  const min = minMatches.at(-1);
   return {
     max: max ? parseAmount(max[1], max[2]) : undefined,
     min: min ? parseAmount(min[1], min[2]) : undefined,
   };
+}
+
+function shouldRefineSearch(message: string, context?: AssistantConversationContext) {
+  if (!context?.lastSearch) return false;
+  return /^(y|con|sin|por|hasta|menos|mas|desde|solo|en|talle|color|pero|que tenga)\b/.test(
+    normalize(message.trim()),
+  );
 }
 
 function faqReply(message: string): AssistantReply | null {
@@ -65,12 +79,6 @@ function faqReply(message: string): AssistantReply | null {
       products: [], suggestions: ["Hablar por WhatsApp", "Donde veo mis pedidos?"],
     };
   }
-  if (/pedido|orden|seguimiento|estado de compra/.test(message)) {
-    return {
-      message: "Inicia sesion y entra en Mi cuenta > Mis pedidos para ver el estado, detalle e historial de tus compras.",
-      products: [], suggestions: ["Ir a mis pedidos", "Hablar por WhatsApp"],
-    };
-  }
   if (/cupon|codigo|descuento/.test(message) && !/oferta/.test(message)) {
     return {
       message: "Los cupones vigentes se ingresan durante el checkout. El sistema valida automaticamente fechas, monto minimo y limite de uso.",
@@ -86,8 +94,72 @@ function faqReply(message: string): AssistantReply | null {
   return null;
 }
 
-async function catalogReply(rawMessage: string): Promise<AssistantReply> {
-  const message = normalize(rawMessage);
+async function orderReply(message: string, userId?: string): Promise<AssistantReply | null> {
+  if (!/pedido|orden|seguimiento|estado de compra|mis compras/.test(message)) return null;
+
+  if (!userId) {
+    return {
+      message: "Para consultar tus pedidos necesitas iniciar sesion. La cuenta protege el estado y los datos de cada compra.",
+      products: [],
+      suggestions: ["Iniciar sesion", "Ir a mis pedidos", "Hablar por WhatsApp"],
+    };
+  }
+
+  const requestedNumber = message.toUpperCase().match(/\bER-\d{8}-[A-Z0-9]{6}\b/)?.[0];
+  const orders = await prisma.order.findMany({
+    where: {
+      userId,
+      ...(requestedNumber ? { orderNumber: requestedNumber } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    take: requestedNumber ? 1 : 3,
+    select: {
+      orderNumber: true,
+      status: true,
+      paymentStatus: true,
+      total: true,
+      currency: true,
+      createdAt: true,
+    },
+  });
+
+  if (!orders.length) {
+    return {
+      message: requestedNumber
+        ? "No encontre ese pedido dentro de tu cuenta. Revisa el numero o entra en Mis pedidos."
+        : "Todavia no tenes pedidos asociados a esta cuenta.",
+      products: [],
+      suggestions: ["Ir a mis pedidos", "Buscar productos", "Hablar por WhatsApp"],
+    };
+  }
+
+  return {
+    message: requestedNumber
+      ? "Este es el estado actual de tu pedido."
+      : orders.length === 1
+        ? "Encontre tu pedido mas reciente."
+        : "Estos son tus ultimos pedidos.",
+    products: [],
+    orders: orders.map((order) => ({
+      orderNumber: order.orderNumber,
+      status: order.status,
+      statusLabel: orderStatusLabel[order.status],
+      paymentStatusLabel: paymentStatusLabel[order.paymentStatus],
+      total: Number(order.total),
+      currency: order.currency,
+      createdAt: order.createdAt.toISOString(),
+    })),
+    suggestions: ["Ir a mis pedidos", "Buscar productos", "Hablar por WhatsApp"],
+  };
+}
+
+async function catalogReply(
+  rawMessage: string,
+  context?: AssistantConversationContext,
+): Promise<AssistantReply> {
+  const effectiveMessage = shouldRefineSearch(rawMessage, context)
+    ? `${context?.lastSearch} ${rawMessage}`.slice(0, 500) : rawMessage;
+  const message = normalize(effectiveMessage);
   const [categories, brands, variants] = await Promise.all([
     prisma.category.findMany({ where: { isActive: true }, select: { name: true, slug: true } }),
     prisma.brand.findMany({ where: { isActive: true }, select: { name: true, slug: true } }),
@@ -137,8 +209,10 @@ async function catalogReply(rawMessage: string): Promise<AssistantReply> {
   }).filter((item) => !wantsStock || item.available > 0).sort((a, b) => b.score - a.score || b.available - a.available).slice(0, 4);
 
   if (!ranked.length) return {
-    message: "No encontre productos que coincidan con todo eso. Proba quitando algun filtro o decime que presupuesto y tipo de producto preferis.",
-    products: [], suggestions: ["Ver productos destacados", "Buscar por menos de $80.000", "Hablar por WhatsApp"],
+    message: "No encontre productos que coincidan con todo eso. Proba quitando algun filtro o inicia una nueva busqueda.",
+    products: [],
+    suggestions: ["Nueva busqueda", "Buscar por menos de $80.000", "Hablar por WhatsApp"],
+    context: { lastSearch: effectiveMessage },
   };
   const products = ranked.map(({ product, matchingVariants, available }) => ({
     id: product.id, name: product.name, slug: product.slug, brand: product.brand?.name ?? "ErcLav",
@@ -146,16 +220,36 @@ async function catalogReply(rawMessage: string): Promise<AssistantReply> {
     image: product.images[0] ? productImageUrl(product.images[0].url) : null, available,
     colors: [...new Set(matchingVariants.map((variant) => variant.color).filter((value): value is string => Boolean(value)))],
     sizes: [...new Set(matchingVariants.map((variant) => variant.size).filter((value): value is string => Boolean(value)))],
+    variants: matchingVariants.map((variant) => ({
+      id: variant.id,
+      color: variant.color,
+      size: variant.size,
+      price: Number(variant.price ?? product.salePrice ?? product.basePrice),
+      available: Math.max(
+        0,
+        (variant.stock?.quantity ?? 0) - (variant.stock?.reservedQuantity ?? 0),
+      ),
+    })).sort((a, b) => b.available - a.available),
   }));
   return {
     message: products.length === 1 ? "Encontre esta opcion para vos." : `Encontre ${products.length} opciones que coinciden con tu busqueda.`,
-    products, suggestions: ["Mostrar productos con oferta", "Como son los envios?", "Hablar por WhatsApp"],
+    products,
+    suggestions: ["Solo con stock", "Por menos de $100.000", "Nueva busqueda"],
+    context: { lastSearch: effectiveMessage },
   };
 }
 
 export const deterministicAssistant: ShoppingAssistantProvider = {
-  async respond({ message }) {
+  async respond({ message, context, userId }) {
     const normalized = normalize(message.trim());
-    return faqReply(normalized) ?? catalogReply(message);
+    if (/^(reiniciar|nueva busqueda|empezar de nuevo|limpiar busqueda)$/.test(normalized)) {
+      return {
+        message: "Listo. Empecemos una nueva busqueda. Que tipo de producto necesitas?",
+        products: [],
+        suggestions: ["Ver productos destacados", "Buscar por menos de $80.000", "Ver productos con oferta"],
+        context: {},
+      };
+    }
+    return (await orderReply(normalized, userId)) ?? faqReply(normalized) ?? catalogReply(message, context);
   },
 };

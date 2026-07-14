@@ -98,6 +98,58 @@ export async function addToCartAction(formData: FormData) {
   revalidatePath(`/productos/${variant.product.slug}`);
 }
 
+export async function addAssistantCartItemAction(variantId: string) {
+  if (!(await checkRateLimit("store:assistant-cart", { limit: 30, windowMs: 60 * 1000 })).allowed) {
+    return { ok: false, message: "Espera un momento antes de volver a agregar productos." };
+  }
+
+  const parsed = z.string().min(1).max(64).safeParse(variantId);
+  if (!parsed.success) return { ok: false, message: "La variante seleccionada no es valida." };
+
+  const session = await auth();
+  const variant = await prisma.productVariant.findUnique({
+    where: { id: parsed.data },
+    select: {
+      id: true,
+      isActive: true,
+      price: true,
+      stock: { select: { quantity: true, reservedQuantity: true } },
+      product: {
+        select: { name: true, slug: true, isActive: true, salePrice: true, basePrice: true },
+      },
+    },
+  });
+
+  if (!variant?.isActive || !variant.product.isActive) {
+    return { ok: false, message: "Este producto ya no esta disponible." };
+  }
+
+  const available = Math.max(0, (variant.stock?.quantity ?? 0) - (variant.stock?.reservedQuantity ?? 0));
+  if (!available) return { ok: false, message: "Esta variante no tiene stock disponible." };
+
+  const cart = await getOrCreateCart(session?.user?.id);
+  const existing = await prisma.cartItem.findUnique({
+    where: { cartId_variantId: { cartId: cart.id, variantId: variant.id } },
+    select: { quantity: true },
+  });
+
+  if ((existing?.quantity ?? 0) >= available) {
+    return { ok: false, message: "Ya tenes en el carrito todas las unidades disponibles." };
+  }
+
+  const unitPrice = variant.price ?? variant.product.salePrice ?? variant.product.basePrice;
+  await prisma.cartItem.upsert({
+    where: { cartId_variantId: { cartId: cart.id, variantId: variant.id } },
+    update: { quantity: { increment: 1 }, unitPrice },
+    create: { cartId: cart.id, variantId: variant.id, quantity: 1, unitPrice },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/checkout");
+  revalidatePath(`/productos/${variant.product.slug}`);
+  return { ok: true, message: `${variant.product.name} se agrego al carrito.` };
+}
+
 export async function updateCartItemAction(itemId: string, quantity: number) {
   const cookieStore = await cookies();
   const cartId = cookieStore.get(cartCookieName)?.value;
