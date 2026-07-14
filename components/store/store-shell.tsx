@@ -5,12 +5,15 @@ import { Heart, Search, ShieldCheck, ShoppingBag, User } from "lucide-react";
 import { auth } from "@/auth";
 import { getCart } from "@/actions/store";
 import { getNavigationCategories } from "@/lib/catalog-data";
-import { WhatsAppContact } from "@/components/store/whatsapp-contact";
 import { whatsappUrl } from "@/lib/whatsapp";
 
 const CartDrawer = dynamic(() => import("@/components/store/cart-drawer").then((module) => module.CartDrawer), {
   loading: () => <span className="inline-flex h-10 w-10" aria-hidden />,
 });
+
+const ShoppingAssistant = dynamic(
+  () => import("@/components/store/shopping-assistant").then((module) => module.ShoppingAssistant),
+);
 
 export async function StoreShell({ children }: { children: React.ReactNode }) {
   const [session, categories, cart] = await Promise.all([
@@ -112,7 +115,7 @@ export async function StoreShell({ children }: { children: React.ReactNode }) {
         </form>
       </header>
       <div id="main-content" tabIndex={-1}>{children}</div>
-      <WhatsAppContact href={whatsappHref} />
+      <ShoppingAssistant whatsappHref={whatsappHref} />
       <footer className="mt-16 border-t border-black/10 bg-neutral-950 text-white">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-[1.2fr_0.8fr_0.8fr] lg:px-8">
           <div>
